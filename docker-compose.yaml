@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres
+    container_name: audit-listener-postgres
+    environment:
+      POSTGRES_USER: audit_listener
+      POSTGRES_DB: events
+      POSTGRES_PASSWORD: 12345
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_listener -d events"]
+      interval: 10s
+      timeout: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
