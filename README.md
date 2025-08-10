@@ -6,7 +6,7 @@ Audit-listener предназначен для получения событий
 - **contractor-audit-method-topic** - события выполнения методов
 - **contractor-audit-http-topic** - события HTTP запросов
 
-## Технологический стек
+## Стек
 
 - **Java 17+**
 - **Spring Boot 3.x**
