@@ -16,14 +16,16 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static io.github.auditlistener.utils.TestEventUtils.createHttpIncomingEvent;
+import static io.github.auditlistener.utils.TestEventUtils.createHttpOutgoingEvent;
+import static io.github.auditlistener.utils.TestEventUtils.createMethodEndEvent;
+import static io.github.auditlistener.utils.TestEventUtils.createMethodErrorEvent;
+import static io.github.auditlistener.utils.TestEventUtils.createMethodStartEvent;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -76,7 +78,9 @@ public class ListenerIntegrationTest {
 
         kafkaTemplate.send("contractor-audit-method-topic", correlationId, jsonMessage);
 
-        Thread.sleep(2000);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> eventRepository.findByCorrelationIdOrderByTimestamp(correlationId).size() == 1);
 
         List<Event> events = eventRepository.findByCorrelationIdOrderByTimestamp(correlationId);
         assertThat(events).hasSize(1);
@@ -98,7 +102,9 @@ public class ListenerIntegrationTest {
 
         kafkaTemplate.send("contractor-audit-method-topic", correlationId, jsonMessage);
 
-        Thread.sleep(2000);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> eventRepository.findByCorrelationIdOrderByTimestamp(correlationId).size() == 1);
 
         List<Event> events = eventRepository.findByCorrelationIdOrderByTimestamp(correlationId);
         assertThat(events).hasSize(1);
@@ -121,7 +127,9 @@ public class ListenerIntegrationTest {
 
         kafkaTemplate.send("contractor-audit-method-topic", correlationId, jsonMessage);
 
-        Thread.sleep(2000);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> eventRepository.findByCorrelationIdOrderByTimestamp(correlationId).size() == 1);
 
         List<Event> events = eventRepository.findByCorrelationIdOrderByTimestamp(correlationId);
         assertThat(events).hasSize(1);
@@ -144,7 +152,9 @@ public class ListenerIntegrationTest {
 
         kafkaTemplate.send("contractor-audit-http-topic", key, jsonMessage);
 
-        Thread.sleep(2000);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> eventRepository.findByCorrelationIdOrderByTimestamp(key).size() == 1);
 
         List<Event> events = eventRepository.findByCorrelationIdOrderByTimestamp(key);
         assertThat(events).hasSize(1);
@@ -168,7 +178,9 @@ public class ListenerIntegrationTest {
 
         kafkaTemplate.send("contractor-audit-http-topic", key, jsonMessage);
 
-        Thread.sleep(2000);
+        await().atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> eventRepository.findByCorrelationIdOrderByTimestamp(key).size() == 1);
 
         List<Event> events = eventRepository.findByCorrelationIdOrderByTimestamp(key);
         assertThat(events).hasSize(1);
@@ -181,71 +193,6 @@ public class ListenerIntegrationTest {
         assertThat(event.getUri()).isEqualTo("/api/test2/getUser");
         assertThat(event.getDirection()).isEqualTo("OUTGOING");
 
-    }
-
-    private Map<String, Object> createMethodStartEvent(String correlationId) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("correlationId", correlationId);
-        event.put("eventType", "START");
-        event.put("methodName", "TestClass.testMethod");
-        event.put("logLevel", "DEBUG");
-        event.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-
-        return event;
-    }
-
-    private Map<String, Object> createMethodEndEvent(String correlationId) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("correlationId", correlationId);
-        event.put("eventType", "END");
-        event.put("methodName", "TestClass.testMethod");
-        event.put("logLevel", "DEBUG");
-        event.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-
-        return event;
-    }
-
-    private Map<String, Object> createMethodErrorEvent(String correlationId) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("correlationId", correlationId);
-        event.put("eventType", "ERROR");
-        event.put("methodName", "TestClass.testMethod");
-        event.put("logLevel", "ERROR");
-        event.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-        event.put("errorMessage", "Test error message");
-        return event;
-    }
-
-    private Map<String, Object> createHttpIncomingEvent() {
-        Map<String, Object> event = new HashMap<>();
-        event.put("method", "GET");
-        event.put("statusCode", 200);
-        event.put("uri", "/api/test");
-        event.put("direction", "INCOMING");
-        event.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-
-        Map<String, Object> responseBody = new HashMap<>();
-        responseBody.put("id", 123);
-        responseBody.put("name", "Test Response");
-        event.put("responseBody", responseBody);
-
-        return event;
-    }
-
-    private Map<String, Object> createHttpOutgoingEvent() {
-        Map<String, Object> event = new HashMap<>();
-        event.put("method", "POST");
-        event.put("statusCode", 201);
-        event.put("uri", "/api/test2/getUser");
-        event.put("direction", "OUTGOING");
-        event.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-
-        Map<String, Object> responseBody = new HashMap<>();
-        responseBody.put("status", "Test user created");
-        responseBody.put("id", 456);
-        event.put("responseBody", responseBody);
-
-        return event;
     }
 
 }
