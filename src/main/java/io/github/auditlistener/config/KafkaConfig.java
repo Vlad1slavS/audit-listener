@@ -39,6 +39,9 @@ public class KafkaConfig {
         configProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, config.getKafka().isEnableAutoCommit());
         configProps.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, config.getKafka().getIsolationLevel());
         configProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, config.getKafka().getMaxPollRecords());
+        configProps.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, config.getKafka().getSessionTimeoutMs());
+        configProps.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, config.getKafka().getHeartbeatIntervalMs());
+        configProps.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, config.getKafka().getMaxPollIntervalMs());
 
         return new DefaultKafkaConsumerFactory<>(configProps);
     }

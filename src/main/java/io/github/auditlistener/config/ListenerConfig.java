@@ -20,9 +20,12 @@ public class ListenerConfig {
         private String httpTopic = "audit.requests";
         private String errorTopic = "audit.errors";
         private String autoOffsetReset = "earliest";
-        private int maxPollRecords = 500;
+        private int maxPollRecords = 1;
         private String isolationLevel = "read_committed";
         private boolean enableAutoCommit = false;
+        private int sessionTimeoutMs = 30000;
+        private int heartbeatIntervalMs = 10000;
+        private int maxPollIntervalMs = 300000;
     }
 
 }
