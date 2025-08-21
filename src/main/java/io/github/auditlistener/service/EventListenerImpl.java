@@ -2,11 +2,12 @@ package io.github.auditlistener.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.auditlistener.model.entity.Event;
-import io.github.auditlistener.model.enums.EventSource;
-import io.github.auditlistener.model.enums.EventType;
-import io.github.auditlistener.repository.EventRepository;
-import lombok.extern.slf4j.Slf4j;
+import io.github.auditlistener.model.elastic.ErrorDocument;
+import io.github.auditlistener.model.elastic.HttpDocument;
+import io.github.auditlistener.model.elastic.MethodDocument;
+import io.github.auditlistener.utils.EventValidator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -16,27 +17,34 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.UUID;
 
 /**
  * Сервис "вычитки" сообщений из Kafka
  */
 @Service
-@Slf4j
 public class EventListenerImpl implements EventListener {
 
-    private final EventRepository eventRepository;
-    private final ObjectMapper objectMapper;
+    private final Logger log = LogManager.getLogger(EventListenerImpl.class);
 
-    public EventListenerImpl(EventRepository eventRepository, ObjectMapper objectMapper) {
-        this.eventRepository = eventRepository;
+//    private final EventRepository eventRepository;
+    private final ObjectMapper objectMapper;
+    private final KafkaServiceImpl kafkaService;
+    private final ElasticSearchServiceImpl elasticsearchService;
+
+    public EventListenerImpl(ObjectMapper objectMapper,
+                             KafkaServiceImpl errorKafkaService, ElasticSearchServiceImpl elasticsearchService) {
+//        this.eventRepository = eventRepository;
         this.objectMapper = objectMapper;
+        this.kafkaService = errorKafkaService;
+        this.elasticsearchService = elasticsearchService;
     }
 
     /**
      * Обработка событий метода
      */
-    @KafkaListener(topics = "contractor-audit-method-topic", containerFactory = "kafkaListenerContainerFactory")
+    @KafkaListener(topics = "audit.methods", containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void handleMethodEvent(@Payload String message,
                                   @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
@@ -47,40 +55,62 @@ public class EventListenerImpl implements EventListener {
                 topic, key);
 
         try {
+            JsonNode event;
+            try {
+                event = objectMapper.readTree(message);
+            } catch (Exception e) {
+                kafkaService.sendErrorMessage("PARSING_ERROR", e.getMessage(), topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
-            JsonNode eventNode = objectMapper.readTree(message);
+            if (!EventValidator.validateMethodEvent(event)) {
+                kafkaService.sendErrorMessage("VALIDATION_ERROR", "Required fields missing", topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
-            Event event = Event.builder()
-                    .correlationId(eventNode.hasNonNull("correlationId") ? eventNode.get("correlationId").asText() : null)
-                    .eventType(eventNode.hasNonNull("eventType") ? EventType.getByName(eventNode.get("eventType").asText()) : null)
-                    .eventSource(EventSource.METHOD)
-                    .targetName(eventNode.hasNonNull("methodName") ? eventNode.get("methodName").asText() : null)
-                    .logLevel(eventNode.hasNonNull("logLevel") ? eventNode.get("logLevel").asText() : null)
-                    .timestamp(eventNode.hasNonNull("timestamp")
-                            ? LocalDateTime.parse(eventNode.get("timestamp").asText(), DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+            MethodDocument document = MethodDocument.builder()
+                    .id(UUID.randomUUID().toString())
+                    .correlationId(event.get("correlationId").asText())
+                    .timestamp(LocalDateTime.parse(event.get("timestamp").asText()))
+                    .eventType(event.get("eventType").asText())
+                    .logLevel(event.get("logLevel").asText())
+                    .methodName(event.get("methodName").asText())
+                    .args(event.hasNonNull("arguments")
+                            ? Arrays.toString(objectMapper.convertValue(event.get("arguments"), Object[].class))
                             : null)
-                    .data(eventNode)
-                    .errorMessage(eventNode.hasNonNull("errorMessage") ? eventNode.get("errorMessage").asText() : null)
+                    .result(event.hasNonNull("result")
+                            ? event.get("result").asText()
+                            : null)
+                    .errorMessage(event.hasNonNull("errorMessage")
+                            ? event.get("errorMessage").asText()
+                            : null)
                     .build();
 
-            eventRepository.save(event);
-
-            log.debug("Successfully saved method audit event with correlation ID: {}",
-                    event.getCorrelationId());
+            try {
+                elasticsearchService.indexMethodDocument(document);
+                log.debug("Successfully indexed method event with correlation ID: {}", document.getCorrelationId());
+            } catch (Exception e) {
+                kafkaService.sendErrorMessage("INDEXING_ERROR", e.getMessage(), topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
             acknowledgment.acknowledge();
 
         } catch (Exception e) {
-            log.error("Failed to process method audit message: {}", message, e);
-            throw new RuntimeException("Failed to process audit message", e);
+            log.error("Unexpected error processing method audit message: {}", message, e);
+            kafkaService.sendErrorMessage("PROCESSING_ERROR", e.getMessage(), topic, message);
+            acknowledgment.acknowledge();
         }
+
     }
 
     /**
      * Обработка HTTP событий
      */
-    @KafkaListener(topics = "contractor-audit-http-topic",
-            containerFactory = "kafkaListenerContainerFactory")
+    @KafkaListener(topics = "audit.requests", containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void handleHttpEvent(@Payload String message,
                                 @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
@@ -91,31 +121,75 @@ public class EventListenerImpl implements EventListener {
                 topic, key);
 
         try {
-            JsonNode eventNode = objectMapper.readTree(message);
+            JsonNode event;
+            try {
+                event = objectMapper.readTree(message);
+            } catch (Exception e) {
+                kafkaService.sendErrorMessage("PARSING_ERROR", e.getMessage(), topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
-            Event auditEvent = Event.builder()
+            if (!EventValidator.validateHttpEvent(event)) {
+                kafkaService.sendErrorMessage("VALIDATION_ERROR", "Required fields missing", topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            HttpDocument document = HttpDocument.builder()
+                    .id(UUID.randomUUID().toString())
                     .correlationId(key)
-                    .eventSource(EventSource.HTTP)
-                    .logLevel("INFO")
-                    .timestamp(eventNode.hasNonNull("timestamp")
-                            ? LocalDateTime.parse(eventNode.get("timestamp").asText(), DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .timestamp(LocalDateTime.parse(event.get("timestamp").asText()))
+                    .direction(event.get("direction").asText())
+                    .method(event.get("method").asText())
+                    .uri(event.get("uri").asText())
+                    .statusCode(event.get("statusCode").asInt())
+                    .requestBody(event.hasNonNull("requestBody")
+                            ? event.get("requestBody").asText()
                             : null)
-                    .data(eventNode.hasNonNull("responseBody") ? eventNode.get("responseBody") : null)
-                    .httpMethod(eventNode.hasNonNull("method") ? eventNode.get("method").asText() : null)
-                    .httpStatus(eventNode.hasNonNull("statusCode") ? eventNode.get("statusCode").asInt() : 0)
-                    .uri(eventNode.hasNonNull("uri") ? eventNode.get("uri").asText() : null)
-                    .direction(eventNode.hasNonNull("direction") ? eventNode.get("direction").asText() : null)
+                    .responseBody(event.hasNonNull("responseBody")
+                            ? event.get("responseBody").asText()
+                            : null)
                     .build();
 
-            eventRepository.save(auditEvent);
-
-            log.debug("Successfully saved HTTP audit event for URI: {}", auditEvent.getUri());
+            try {
+                elasticsearchService.indexHttpDocument(document);
+                log.debug("Successfully indexed HTTP event for URI: {}", document.getUri());
+            } catch (Exception e) {
+                kafkaService.sendErrorMessage("INDEXING_ERROR", e.getMessage(), topic, message);
+                acknowledgment.acknowledge();
+                return;
+            }
 
             acknowledgment.acknowledge();
 
         } catch (Exception e) {
-            log.error("Failed to process HTTP audit message: {}", message, e);
-            throw new RuntimeException("Failed to process audit message", e);
+            log.error("Unexpected error processing HTTP audit message: {}", message, e);
+            kafkaService.sendErrorMessage("PROCESSING_ERROR", e.getMessage(), topic, message);
+            acknowledgment.acknowledge();
+        }
+    }
+
+    @KafkaListener(topics = "audit.errors", containerFactory = "kafkaListenerContainerFactory")
+    public void handleErrorEvent(@Payload String message,
+                                 @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+                                 @Header(KafkaHeaders.RECEIVED_KEY) String key,
+                                 Acknowledgment acknowledgment) {
+
+        log.debug("Received error message from topic: {}, key: {}", topic, key);
+
+        try {
+            JsonNode errorNode = objectMapper.readTree(message);
+            ErrorDocument errorDocument =
+                    objectMapper.convertValue(errorNode, ErrorDocument.class);
+
+            elasticsearchService.indexErrorDocument(errorDocument);
+            log.debug("Successfully indexed error event");
+            acknowledgment.acknowledge();
+
+        } catch (Exception e) {
+            log.error("Failed to process error message: {}", message, e);
+            acknowledgment.acknowledge();
         }
     }
 
