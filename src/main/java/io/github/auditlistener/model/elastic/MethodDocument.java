@@ -26,9 +26,9 @@ public class MethodDocument {
 
     private String eventType;
 
-    private String logLevel;
+    private String level;
 
-    private String methodName;
+    private String method;
 
     private String args;
 
