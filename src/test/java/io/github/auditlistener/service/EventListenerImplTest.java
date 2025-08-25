@@ -6,6 +6,9 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.github.auditlistener.model.elastic.ErrorDocument;
 import io.github.auditlistener.model.elastic.HttpDocument;
 import io.github.auditlistener.model.elastic.MethodDocument;
+import io.github.auditlistener.service.impl.ElasticSearchServiceImpl;
+import io.github.auditlistener.service.impl.EventListenerImpl;
+import io.github.auditlistener.service.impl.KafkaServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,8 +81,8 @@ class EventListenerImplTest {
         MethodDocument captured = documentCaptor.getValue();
         assertEquals("test-correlation-id", captured.getCorrelationId());
         assertEquals("START", captured.getEventType());
-        assertEquals("DEBUG", captured.getLogLevel());
-        assertEquals("TestService.testMethod", captured.getMethodName());
+        assertEquals("DEBUG", captured.getLevel());
+        assertEquals("TestService.testMethod", captured.getMethod());
         assertNotNull(captured.getArgs());
     }
 

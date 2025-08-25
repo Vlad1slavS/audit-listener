@@ -74,7 +74,7 @@ curl -X PUT "$ES_HOST/audit-requests" -H "Content-Type: application/json" -d '{
       "method": {
         "type": "keyword"
       },
-      "url": {
+      "uri": {
         "type": "text",
         "analyzer": "audit_analyzer",
         "fields": {

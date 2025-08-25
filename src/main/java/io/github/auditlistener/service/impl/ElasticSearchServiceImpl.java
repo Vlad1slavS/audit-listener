@@ -1,4 +1,4 @@
-package io.github.auditlistener.service;
+package io.github.auditlistener.service.impl;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.IndexRequest;
@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch.core.IndexResponse;
 import io.github.auditlistener.model.elastic.ErrorDocument;
 import io.github.auditlistener.model.elastic.HttpDocument;
 import io.github.auditlistener.model.elastic.MethodDocument;
+import io.github.auditlistener.service.ElasticSearchService;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

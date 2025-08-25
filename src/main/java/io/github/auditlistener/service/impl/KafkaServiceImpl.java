@@ -1,8 +1,9 @@
-package io.github.auditlistener.service;
+package io.github.auditlistener.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.auditlistener.config.ListenerConfig;
 import io.github.auditlistener.model.elastic.ErrorDocument;
+import io.github.auditlistener.service.KafkaService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.kafka.core.KafkaTemplate;

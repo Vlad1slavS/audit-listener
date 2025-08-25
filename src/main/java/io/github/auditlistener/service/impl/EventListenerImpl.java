@@ -1,10 +1,11 @@
-package io.github.auditlistener.service;
+package io.github.auditlistener.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.auditlistener.model.elastic.ErrorDocument;
 import io.github.auditlistener.model.elastic.HttpDocument;
 import io.github.auditlistener.model.elastic.MethodDocument;
+import io.github.auditlistener.service.EventListener;
 import io.github.auditlistener.utils.EventValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
